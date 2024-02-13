@@ -1,4 +1,3 @@
-
 #include <queue>
 #include <set>
 #include <unordered_map>
@@ -75,9 +74,58 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_face(Halfedge_Me
     flipped edge.
 */
 std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::EdgeRef e) {
+    // we can ignore boundary edges
+    if(e->on_boundary()) {
+        return std::nullopt;
+    }
 
-    (void)e;
-    return std::nullopt;
+    // get subject half edges, and next halfedges
+    auto halfedge1 = e->halfedge();
+    auto halfedge2 = halfedge1->twin();
+    auto next1 = halfedge1->next();
+    auto next2 = halfedge2->next();
+    // next next halfedges (he->next()->next())
+    auto nn1 = next1->next();
+    auto nn2 = next2->next();
+    // destinarion vertices
+    auto dest1 = nn1->vertex();
+    auto dest2 = nn2->vertex();
+    // find halfedge to origin1
+    auto backnext1 = nn1;
+    while(backnext1->next() != halfedge1) {
+        backnext1 = backnext1->next();
+    }
+
+    // find half edge to origin2
+    auto backnext2 = nn2;
+    while(backnext2->next() != halfedge2) {
+        backnext2 = backnext2->next();
+    }
+
+    // Do counter clockwise rotation
+
+    // set curr halfedge vertex to dest2, and twin to dest1
+    halfedge1->vertex() = dest2;
+    halfedge2->vertex() = dest1;
+    // set next ptr to dest's next
+    halfedge1->next() = nn1;
+    halfedge2->next() = nn2;
+
+    next1->next() = halfedge2;
+    next2->next() = halfedge1;
+
+    // set twin we found to twin next
+    backnext1->next() = next2;
+    backnext2->next() = next1;
+
+    // set face and twin fce
+    halfedge1->face()->halfedge() = halfedge1;
+    halfedge2->face()->halfedge() = halfedge2;
+
+    // make sure halfedge points to face
+    next1->face() = halfedge2->face();
+    next2->face() = halfedge1->face();
+    return std::optional<Halfedge_Mesh::EdgeRef>(e);
 }
 
 /*
