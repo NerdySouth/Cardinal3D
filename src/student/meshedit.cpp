@@ -78,53 +78,60 @@ std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::Ed
     if(e->on_boundary()) {
         return std::nullopt;
     }
+    /* Adapted from the edge flip tutorial
+     */
+    // HALFEDGES
+    HalfedgeRef h0 = e->halfedge();
+    auto h1 = h0->twin();
+    auto h2 = h0->next();
+    auto h3 = h1->next();
 
-    // get subject half edges, and next halfedges
-    auto halfedge1 = e->halfedge();
-    auto halfedge2 = halfedge1->twin();
-    auto next1 = halfedge1->next();
-    auto next2 = halfedge2->next();
-    // next next halfedges (he->next()->next())
-    auto nn1 = next1->next();
-    auto nn2 = next2->next();
-    // destinarion vertices
-    auto dest1 = nn1->vertex();
-    auto dest2 = nn2->vertex();
-    // find halfedge to origin1
-    auto backnext1 = nn1;
-    while(backnext1->next() != halfedge1) {
-        backnext1 = backnext1->next();
+    auto h4 = h0;
+    while(h4->next() != h0) {
+        h4 = h4->next();
     }
 
-    // find half edge to origin2
-    auto backnext2 = nn2;
-    while(backnext2->next() != halfedge2) {
-        backnext2 = backnext2->next();
+    auto h5 = h1;
+    while(h5->next() != h1) {
+        h5 = h5->next();
     }
 
-    // Do counter clockwise rotation
+    auto h6 = h2->next();
+    auto h7 = h3->next();
 
-    // set curr halfedge vertex to dest2, and twin to dest1
-    halfedge1->vertex() = dest2;
-    halfedge2->vertex() = dest1;
-    // set next ptr to dest's next
-    halfedge1->next() = nn1;
-    halfedge2->next() = nn2;
+    // VERTICES
+    VertexRef v0 = h0->next()->vertex();
+    auto v1 = h1->next()->vertex();
+    auto v2 = h0->next()->next()->vertex();
+    auto v3 = h1->next()->next()->vertex();
 
-    next1->next() = halfedge2;
-    next2->next() = halfedge1;
+    // FACES
+    FaceRef f0 = h0->face();
+    auto f1 = h1->face();
 
-    // set twin we found to twin next
-    backnext1->next() = next2;
-    backnext2->next() = next1;
+    // Counter clockwise rotation
+    h0->vertex() = v3;
+    h0->next() = h6;
 
-    // set face and twin fce
-    halfedge1->face()->halfedge() = halfedge1;
-    halfedge2->face()->halfedge() = halfedge2;
+    h1->vertex() = v2;
+    h1->next() = h7;
 
-    // make sure halfedge points to face
-    next1->face() = halfedge2->face();
-    next2->face() = halfedge1->face();
+    h2->next() = h1;
+    h2->face() = f1;
+
+    h3->next() = h0;
+    h3->face() = f0;
+
+    h4->next() = h3;
+
+    h5->next() = h2;
+
+    v0->halfedge() = h2;
+    v1->halfedge() = h3;
+
+    f0->halfedge() = h0;
+    f1->halfedge() = h1;
+
     return std::optional<Halfedge_Mesh::EdgeRef>(e);
 }
 
