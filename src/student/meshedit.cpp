@@ -54,9 +54,62 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::erase_edge(Halfedge_Mesh::E
     the new vertex created by the collapse.
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(Halfedge_Mesh::EdgeRef e) {
+    VertexRef v = new_vertex();
+    v->halfedge() = e->halfedge()->next();
+    v->pos = e->center();
 
-    (void)e;
-    return std::nullopt;
+    auto process_out_edges = [=](HalfedgeRef h) {
+        HalfedgeRef hstart = h;
+        while(h->twin()->next() != hstart) {
+            h = h->twin()->next();
+            h->vertex() = v;
+        }
+
+        h = hstart;
+        while(h->twin()->next() != hstart) {
+            h = h->twin()->next();
+        }
+
+        h = hstart;
+        while(h != hstart) {
+            auto next = h->next();
+            if(next == hstart) {
+                // replace with hstart's next
+                h->next() = hstart->next();
+                break;
+            }
+            h = next;
+        }
+
+        if(hstart->face()->halfedge() == hstart) {
+            // give new face to halfedge
+            hstart->face()->halfedge() = hstart->next();
+        }
+
+        // remove faces with only 2 edges
+        auto h1 = hstart->face()->halfedge();
+        if(h1 == h1->next()->next()) {
+            h1->vertex()->halfedge() = h1->next()->twin();
+            h1->next()->vertex()->halfedge() = h1->twin();
+            h1->twin()->twin() = h1->next()->twin();
+            h1->next()->twin()->twin() = h1->twin();
+            h1->twin()->edge() = h1->next()->edge();
+            h1->twin()->edge()->halfedge() = h1->twin();
+
+            erase(h1->face());
+            erase(h1->edge());
+            erase(h1->next());
+            erase(h1);
+        }
+
+        erase(hstart->vertex());
+        erase(hstart);
+    };
+
+    process_out_edges(e->halfedge());
+    process_out_edges(e->halfedge()->twin());
+    erase(e);
+    return v;
 }
 
 /*
@@ -141,9 +194,135 @@ std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(Halfedge_Mesh::Ed
     the edge that was split, rather than the new edges.
 */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(Halfedge_Mesh::EdgeRef e) {
+    auto he1 = e->halfedge();
+    auto he2 = he1->twin();
+    if(he1->is_boundary() || he2->is_boundary()) {
+        printf("Boundary edges found\n");
+        return std::nullopt;
+    }
 
-    (void)e;
-    return std::nullopt;
+    auto hn1 = he1->next();
+    auto hn2 = he2->next();
+    auto hnn1 = hn1->next();
+    auto hnn2 = hn2->next();
+    auto A = he2->vertex();
+    auto B = he1->vertex();
+    auto C = hnn1->vertex();
+    auto D = hnn2->vertex();
+    auto oldFace = he1->face();
+    auto oldFace2 = he2->face();
+
+    // setup new variables
+    Halfedge_Mesh::VertexRef midVert = new_vertex();
+    auto edgeA = new_edge();
+    auto edgeB = new_edge();
+    auto edgeC = new_edge();
+    auto edgeD = new_edge();
+    auto nhn1 = new_halfedge();
+    auto nhn2 = new_halfedge();
+    auto nhn3 = new_halfedge();
+    auto nhn4 = new_halfedge();
+    auto nhe2 = new_halfedge();
+    auto nhe4 = new_halfedge();
+    auto nface1 = new_face();
+    auto nface2 = new_face();
+    auto nface3 = new_face();
+    auto nface4 = new_face();
+
+    // assign new values
+    midVert->new_pos = e->center();
+    midVert->halfedge() = nhn1;
+
+    edgeA->halfedge() = he2;
+    edgeB->halfedge() = he1;
+    edgeC->halfedge() = nhn2;
+    edgeD->halfedge() = nhn1;
+    // init faces
+    nface1->halfedge() = he2;
+    nface2->halfedge() = nhe2;
+    nface3->halfedge() = he1;
+    nface4->halfedge() = nhe4;
+
+    // init half edges
+    // face 1
+    {
+        he2->next() = nhn1;
+        he2->edge() = edgeA;
+        he2->twin() = nhe2;
+        he2->vertex() = A;
+        he2->face() = nface1;
+        nhn1->next() = hnn2;
+        nhn1->edge() = edgeD;
+        nhn1->twin() = nhn4;
+        nhn1->vertex() = midVert;
+        nhn1->face() = nface1;
+        hnn2->next() = he2;
+        hnn2->edge() = hnn2->edge();
+        hnn2->twin() = hnn2->twin();
+        hnn2->vertex() = D;
+        hnn2->face() = nface1;
+    }
+    // face 2
+    {
+        nhe2->next() = hn1;
+        nhe2->edge() = edgeA;
+        nhe2->twin() = he2;
+        nhe2->vertex() = midVert;
+        nhe2->face() = nface2;
+        nhn2->next() = nhe2;
+        nhn2->edge() = edgeC;
+        nhn2->twin() = nhn3;
+        nhn2->vertex() = C;
+        nhn2->face() = nface2;
+        hn1->next() = nhn2;
+        hn1->edge() = hn1->edge();
+        hn1->twin() = hn1->twin();
+        hn1->vertex() = A;
+        hn1->face() = nface2;
+    }
+    // face 3
+    {
+        he1->next() = nhn3;
+        he1->edge() = edgeB;
+        he1->twin() = nhe4;
+        he1->vertex() = B;
+        he1->face() = nface3;
+        nhn3->next() = hnn1;
+        nhn3->edge() = edgeC;
+        nhn3->twin() = nhn2;
+        nhn3->vertex() = midVert;
+        nhn3->face() = nface3;
+        hnn1->next() = he1;
+        hnn1->edge() = hnn1->edge();
+        hnn1->twin() = hnn1->twin();
+        hnn1->vertex() = C;
+        hnn1->face() = nface3;
+    }
+    // face 4
+    {
+        nhe4->next() = hn2;
+        nhe4->edge() = edgeB;
+        nhe4->twin() = he1;
+        nhe4->vertex() = midVert;
+        nhe4->face() = nface4;
+        nhn4->next() = nhe4;
+        nhn4->edge() = edgeD;
+        nhn4->twin() = nhn1;
+        nhn4->vertex() = D;
+        nhn4->face() = nface4;
+        hn2->next() = nhn4;
+        hn2->edge() = hn2->edge();
+        hn2->twin() = hn2->twin();
+        hn2->vertex() = B;
+        hn2->face() = nface4;
+    }
+
+    // delete unused elements
+    erase(e);
+    erase(oldFace);
+    erase(oldFace2);
+
+    return std::optional<Halfedge_Mesh::VertexRef>(midVert);
 }
 
 /* Note on the beveling process:
